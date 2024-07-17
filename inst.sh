@@ -15,6 +15,8 @@
 
 [[ "$(uname)" == "Darwin" ]] && tmptmpBUILD='1'
 [[ -f /cygdrive/c/cygwin64/bin/uname && ( "$(/cygdrive/c/cygwin64/bin/uname -o)" == "Cygwin" || "$(/cygdrive/c/cygwin64/bin/uname -o)" == "Msys") ]] && tmptmpBUILD='11'
+[[ "$(command -v systemd-detect-virt)" && "$(systemd-detect-virt)" == "openvz" ]] && tmptmpCTVIRTTECH='1'
+
 # for wget -qO- xxx| bash -s - subsitute manner
 [[ "$tmptmpBUILD" != "1" && "$tmptmpBUILD" != "11" ]] && [ "$(id -u)" != 0 ] && exec sudo bash -c "`cat -`" -a "$@"
 # for bash <(wget -qO- xxx) -t subsitute manner we should:
@@ -27,8 +29,8 @@
 
 forcemaintainmode='0'                             # 0:all put in maintain,1,just devdeskos in maintain
 
-export autoDEBMIRROR0='https://github.com/minlearn/1keyddhubfree-debianbase/raw/master'
-export autoDEBMIRROR1='https://gitee.com/minlearn/1keyddhubfree-debianbase/raw/master'
+export autoDEBMIRROR0='https://github.com/gileredman/1keyddhubfree-debianbase/raw/master'
+export autoDEBMIRROR1='https://gitee.com/gileredman/1keyddhubfree-debianbase/raw/master'
 export FORCEDEBMIRROR=''                          # force apply a fixed mirror/targetddurl selection to force override autoselectdebmirror results based on -t -m args given
 export tmpTARGETMODE='0'                          # 0:WGETDD INSTMODE ONLY 1:CLOUDDDINSTALL+BUILD MIXTURE,2,3,nc install mode,defaultly it sholudbe 0, 4 inplace dd mode for debianctmu(lxcct,or kvmct) or debiandemu
 export tmpTARGET=''                               # dummy(for -d only),debianbase,onekeydevdesk,devdeskos,lxcdebtpl,lxcdebiantpl,qemudebtpl,qemudebiantpl,devdeskosfull,debian,debian10restore,debianct,debiandemu,debianctmu
@@ -90,11 +92,18 @@ function prehint0(){
 
 function prehint4(){
 
-  [[ "$tmptmpBUILD" != "1" && "$tmptmpBUILD" != "11" ]] && {
+  [[ "$tmptmpBUILD" != "1" && "$tmptmpBUILD" != "11" && "$tmptmpCTVIRTTECH" != "1" ]] && {
     DEFAULTWORKINGNIC="$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.*' |head -n1 |sed 's/proto.*\|onlink.*//g' |awk '{print $NF}')";
     [[ -z "$DEFAULTWORKINGNIC" ]] && { DEFAULTWORKINGNIC="$(ip -6 -brief route show default |head -n1 |grep -o 'dev .*'|sed 's/proto.*\|onlink.*\|metric.*//g' |awk '{print $NF}')"; };
     [[ -n "$DEFAULTWORKINGNIC" ]] && DEFAULTWORKINGIPSUBV4="$(ip addr |grep ''${DEFAULTWORKINGNIC}'' |grep 'global' |grep 'brd' |head -n1 |grep -o '[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}/[0-9]\{1,2\}')";
     DEFAULTWORKINGGATEV4="$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}' |head -n1 |grep -o '[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}')";
+    [[ -n "$DEFAULTWORKINGIPSUBV4" ]] && [[ -n "$DEFAULTWORKINGGATEV4" ]] && echo -n $DEFAULTWORKINGIPSUBV4,$DEFAULTWORKINGGATEV4 || echo -n 'no default working ipv4';
+  };
+
+  [[ "$tmptmpBUILD" != "1" && "$tmptmpCTVIRTTECH" != "11" && "$tmptmpCTVIRTTECH" == "1" ]] && {
+    DEFAULTWORKINGNIC="$(awk '$2 == 00000000 { print $1 }' /proc/net/route)";
+    [[ -n "$DEFAULTWORKINGNIC" ]] && DEFAULTWORKINGIPSUBV4="$(ip addr show dev ''${DEFAULTWORKINGNIC}'' | sed -nE '/global/s/.*inet (.+) brd.*$/\1/p' | head -n 1)";
+    DEFAULTWORKINGGATEV4="locallink";
     [[ -n "$DEFAULTWORKINGIPSUBV4" ]] && [[ -n "$DEFAULTWORKINGGATEV4" ]] && echo -n $DEFAULTWORKINGIPSUBV4,$DEFAULTWORKINGGATEV4 || echo -n 'no default working ipv4';
   };
 
@@ -169,7 +178,7 @@ function Outbanner(){
 `printf "#%0.s" {1..78}`
 
  Usage): wget -qO- inst.sh|bash  | \033[1;31m!!THIS SCIRPT MAY WIPE ALL DATA!!\033[0m \033[32m`[[ "$tmpTARGETMODE" != '1' && "$tmpBUILD" != '1' ]] && echo -n $(wget --no-check-certificate --no-verbose --content-on-error=on --timeout=1 --tries=2 -qO- 'https://counter.minlearn.org/api/dsrkafuu:demo'|grep -Eo [0-9]*[0-9])`\033[0m
- -----------------------------   | GH): https://github.com/minlearn/1keydd
+ -----------------------------   | GH): https://github.com/gileredman/1keydd
   -t) target *  -m) debmirror    | 自建轻量联合主机社区): https://locnode.com
   -n) staticnet -i) firstnic     | 
   -w) password  -p) firsthd      | [`prehint0`][`prehint4`]
@@ -404,7 +413,7 @@ parsenetcfg(){
   # 1): setnet=1
   # 2): setnet!=1 and netcfgfile containes static (autonet=1=still static)
   # 3): setnet!=1 and netcfgfile dont containes static (autonet=2=dhcp)
-  [[ -n "$FORCENETCFGSTR" || "$FORCENETCFGV6ONLY" == '1' || ( "$tmpBUILD" == '11' || "$tmpBUILD" == '1' ) ]] && setNet='1';
+  [[ -n "$FORCENETCFGSTR" || "$FORCENETCFGV6ONLY" == '1' || ( "$tmpBUILD" == '11' || "$tmpBUILD" == '1' ) || "$tmpCTVIRTTECH" == '1' ]] && setNet='1';
   [[ "$setNet" != '1' ]] && [[ -f '/etc/network/interfaces' ]] && {
     [[ -z "$(sed -n '/iface.*inet static/p' /etc/network/interfaces)" ]] && AutoNet='2' || AutoNet='1';[[ -n "$(sed -n '/iface.*inet manual/p' /etc/network/interfaces)" ]] && [[ -n "$(sed -n '/iface.*inet static/p' /etc/network/interfaces)" ]] && AutoNet='2'
     
@@ -429,9 +438,14 @@ parsenetcfg(){
   fi
 
   # for printing a default nicname,when -n given,has actual effect for setnet!=1,has no effect for setnet=1
-  [[ "$tmpBUILD" != "11" && "$tmpBUILD" != "1" ]] && {
+  [[ "$tmpBUILD" != "11" && "$tmpBUILD" != "1" && "$tmpCTVIRTTECH" != "1" ]] && {
     DEFAULTNIC="$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.*' |head -n1 |sed 's/proto.*\|onlink.*//g' |awk '{print $NF}')";
     [[ -z "$DEFAULTNIC" ]] && { DEFAULTNIC="$(ip -6 -brief route show default |head -n1 |grep -o 'dev .*'|sed 's/proto.*\|onlink.*\|metric.*//g' |awk '{print $NF}')"; }
+    # [[ -z "$DEFAULTNIC" ]] || { echo "Error! get default nic failed";exit 1; }
+  }
+
+  [[ "$tmpBUILD" != "11" && "$tmpBUILD" != "1" && "$tmpCTVIRTTECH" == "1" ]] && {
+    DEFAULTNIC="$(awk '$2 == 00000000 { print $1 }' /proc/net/route)";
     # [[ -z "$DEFAULTNIC" ]] || { echo "Error! get default nic failed";exit 1; }
   }
 
@@ -483,6 +497,13 @@ parsenetcfg(){
     TMPCIDRV6="$(echo -n "$TMPIPSUBV6" |cut -d'/' -f2)";
     FGATE="$(ip -6 -brief route show default|grep ''${DEFAULTNIC}'' |awk -F ' ' '{ print $3}')";
     [[ -n "$TMPCIDRV6" ]] && FMASK="$(prefixlen2subnetmask)"; } && FORCENETCFGSTR="$FIP,$FMASK,$FGATE" && { [[ -f /etc/resolv.conf && ! -f /etc/resolv.conf.old ]] && { cp -f /etc/resolv.conf /etc/resolv.conf.old && > /etc/resolv.conf && echo -e 'nameserver 2001:67c:2b0::4\nnameserver 2001:67c:2b0::6' >/dev/null 2>&1 >> /etc/resolv.conf; } || { cp -f /etc/resolv.conf /etc/resolv.conf.bak && > /etc/resolv.conf && echo -e 'nameserver 2001:67c:2b0::4\nnameserver 2001:67c:2b0::6' >/dev/null 2>&1 >> /etc/resolv.conf; }; }
+
+    # force ct will force staticnetcfg
+    [[ "$tmpCTVIRTTECH" == '1' && -z "$FORCENETCFGSTR" ]] && { [[ -n "$DEFAULTNIC" ]] && TMPIPSUBV4="$(ip addr show dev ''${DEFAULTNIC}'' | sed -nE '/global/s/.*inet (.+) brd.*$/\1/p' | head -n 1)";
+    FIP="$(echo -n "$TMPIPSUBV4" |cut -d'/' -f1)";
+    TMPCIDRV4="$(echo -n "$TMPIPSUBV4" |grep -o '/[0-9]\{1,2\}')";
+    FGATE="locallink";
+    [[ -n "$TMPCIDRV4" ]] && FMASK="$(echo -n '128.0.0.0/1,192.0.0.0/2,224.0.0.0/3,240.0.0.0/4,248.0.0.0/5,252.0.0.0/6,254.0.0.0/7,255.0.0.0/8,255.128.0.0/9,255.192.0.0/10,255.224.0.0/11,255.240.0.0/12,255.248.0.0/13,255.252.0.0/14,255.254.0.0/15,255.255.0.0/16,255.255.128.0/17,255.255.192.0/18,255.255.224.0/19,255.255.240.0/20,255.255.248.0/21,255.255.252.0/22,255.255.254.0/23,255.255.255.0/24,255.255.255.128/25,255.255.255.192/26,255.255.255.224/27,255.255.255.240/28,255.255.255.248/29,255.255.255.252/30,255.255.255.254/31,255.255.255.255/32' |grep -o '[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}'${TMPCIDRV4}'' |cut -d'/' -f1)"; } && { FORCENETCFGSTR="$FIP,$FMASK,$FGATE";echo -e "auto lo\niface lo inet loopback\n\nauto $DEFAULTNIC\niface $DEFAULTNIC inet static\naddress $TMPIPSUBV4\nup route add $(ip route show default 0.0.0.0/0 | sed -E 's/^(.*dev [^ ]+).*$/\1/')\n\nhostname $(hostname)" >/dev/null 2>&1 >> $remasteringdir/ctrnet;echo -e "nameserver 8.8.8.8\nnameserver 2001:4860:4860::8888" >/dev/null 2>&1 >> $remasteringdir/ctrdns; }
 
     # win force v4v6 FORCENETCFGSTR too
     [[ "$tmpBUILD" == '11' && -z "$FORCENETCFGSTR" ]] && { [[ -n "$DEFAULTNIC" ]] && FIP=`echo $(wmic nicconfig where "InterfaceIndex='$FORCE1STNICIDX'" get IPAddress /format:list|sed 's/\r//g'|sed 's/IPAddress={//g'|sed 's/\("\|}\)//g'|cut -d',' -f1)`;
@@ -653,8 +674,9 @@ EOF
   # we must put force1sthdname before forcenetcfgstr,because argpositiion 1,2,3,4 is always there(fixedly appear) but 5 not(if not forced,it dont occpy a pos),we pust fixed ones piorr in front
   [[ "$tmpTARGETMODE" == '0' && "$tmpINSTWITHMANUAL" != '1' && "$tmpTARGET" == devdeskos* ]] && tee -a $topdir/$remasteringdir/initramfs/preseed.cfg $topdir/$remasteringdir/initramfs_arm64/preseed.cfg > /dev/null <<EOF
 # must not place anna-install network-console here in preseed/early_command but instead in partman/early_command
+# in debian installer, some machine dhcp mode are not clever enough, so just force autonet 1 and 2 both static
 d-i preseed/early_command string screen -dmS reboot /sbin/reboot -d 3600
-d-i partman/early_command string count=\`ping -c 5 8.8.8.8 | grep from* | wc -l\`;count6=\`ping -c 5 -6 2001:67c:2b0::6|grep from*|wc -l\`;pid=\`screen -ls|grep -Eo [0-9]*.reboot|grep -Eo [0-9]*\`;[ \$count -ne 0 -o \$count6 -ne 0 ] && kill -9 \$pid;anna-install parted-udeb fdisk-udeb;chmod 755 /usr/lib/liveinstall-patchs/longrunpipebgcmd_redirectermoniter.sh;/usr/lib/liveinstall-patchs/longrunpipebgcmd_redirectermoniter.sh '$PIPECMDSTR' $([[ "$FORCE1STHDNAME" != '' ]] && echo "/dev/$FORCE1STHDNAME" || echo "\"\$(list-devices disk | head -n1)\"") $([[ "$FORCE1STNICNAME" != '' ]] && echo "$IFETHMAC" || echo "\"\$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.*' |head -n1 |sed 's/proto.*\|onlink.*//g' |awk '{print \$NF}')\"") $([[ "$FORCEPASSWORD" != '' ]] && echo "$FORCEPASSWORD") $([ "$setNet" == '1' -a "$FORCENETCFGSTR" != '' ] && echo "$FIP,$FMASK,$FGATE";[ "$AutoNet" == '1' -a "$IP" != '' -a "$MASK" != '' -a "$GATE" != '' ] && echo "$IP","$MASK","$GATE")
+d-i partman/early_command string count=\`ping -c 5 8.8.8.8 | grep from* | wc -l\`;count6=\`ping -c 5 -6 2001:67c:2b0::6|grep from*|wc -l\`;pid=\`screen -ls|grep -Eo [0-9]*.reboot|grep -Eo [0-9]*\`;[ \$count -ne 0 -o \$count6 -ne 0 ] && kill -9 \$pid;anna-install parted-udeb fdisk-udeb;chmod 755 /usr/lib/liveinstall-patchs/longrunpipebgcmd_redirectermoniter.sh;/usr/lib/liveinstall-patchs/longrunpipebgcmd_redirectermoniter.sh '$PIPECMDSTR' $([[ "$FORCE1STHDNAME" != '' ]] && echo "/dev/$FORCE1STHDNAME" || echo "\"\$(list-devices disk | head -n1)\"") $([[ "$FORCE1STNICNAME" != '' ]] && echo "$IFETHMAC" || echo "\"\$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.*' |head -n1 |sed 's/proto.*\|onlink.*//g' |awk '{print \$NF}')\"") $([[ "$FORCEPASSWORD" != '' ]] && echo "$FORCEPASSWORD") $([ "$setNet" == '1' -a "$FORCENETCFGSTR" != '' ] && echo "$FIP,$FMASK,$FGATE";[ "$AutoNet" == '1' -o "$AutoNet" == '2' ] && [ "$IP" != '' -a "$MASK" != '' -a "$GATE" != '' ] && echo "$IP","$MASK","$GATE")
 EOF
 
 
@@ -675,8 +697,9 @@ EOF
   [[ "$tmpTARGETMODE" == '0' && "$tmpINSTWITHMANUAL" != '1' ]] && [[ "$tmpTARGET" != 'debian' && "$tmpTARGET" != devdeskos* && "$tmpTARGET" != dummy ]] && tee -a $topdir/$remasteringdir/initramfs/preseed.cfg $topdir/$remasteringdir/initramfs_arm64/preseed.cfg > /dev/null <<EOF
 # anna-install wget-udeb here?
 # must not place anna-install network-console here in preseed/early_command but instead in partman/early_command
+# in debian installer, some machine dhcp mode are not clever enough, so just force autonet 1 and 2 both static
 d-i preseed/early_command string screen -dmS reboot /sbin/reboot -d 3600
-d-i partman/early_command string count=\`ping -c 5 8.8.8.8 | grep from* | wc -l\`;count6=\`ping -c 5 -6 2001:67c:2b0::6|grep from*|wc -l\`;pid=\`screen -ls|grep -Eo [0-9]*.reboot|grep -Eo [0-9]*\`;[ \$count -ne 0 -o \$count6 -ne 0 ] && kill -9 \$pid;anna-install fdisk-udeb;chmod 755 /usr/lib/ddinstall-patchs/longrunpipebgcmd_redirectermoniter.sh;/usr/lib/ddinstall-patchs/longrunpipebgcmd_redirectermoniter.sh '$PIPECMDSTR' $([[ "$FORCE1STHDNAME" != '' ]] && echo "/dev/$FORCE1STHDNAME" || echo "\"\$(list-devices disk | head -n1)\"") $([[ "$FORCE1STNICNAME" != '' ]] && echo "$IFETHMAC" || echo "\"\$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.*' |head -n1 |sed 's/proto.*\|onlink.*//g' |awk '{print \$NF}')\"") $([[ "$FORCEINSTCTL" != '' ]] && echo "$FORCEINSTCTL") $([[ "$FORCEPASSWORD" != '' ]] && echo "$FORCEPASSWORD") $([ "$setNet" == '1' -a "$FORCENETCFGSTR" != '' ] && echo "$FIP,$FMASK,$FGATE";[ "$AutoNet" == '1' -a "$IP" != '' -a "$MASK" != '' -a "$GATE" != '' ] && echo "$IP","$MASK","$GATE")
+d-i partman/early_command string count=\`ping -c 5 8.8.8.8 | grep from* | wc -l\`;count6=\`ping -c 5 -6 2001:67c:2b0::6|grep from*|wc -l\`;pid=\`screen -ls|grep -Eo [0-9]*.reboot|grep -Eo [0-9]*\`;[ \$count -ne 0 -o \$count6 -ne 0 ] && kill -9 \$pid;anna-install fdisk-udeb;chmod 755 /usr/lib/ddinstall-patchs/longrunpipebgcmd_redirectermoniter.sh;/usr/lib/ddinstall-patchs/longrunpipebgcmd_redirectermoniter.sh '$PIPECMDSTR' $([[ "$FORCE1STHDNAME" != '' ]] && echo "/dev/$FORCE1STHDNAME" || echo "\"\$(list-devices disk | head -n1)\"") $([[ "$FORCE1STNICNAME" != '' ]] && echo "$IFETHMAC" || echo "\"\$(ip route show |grep -o 'default via [0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.[0-9]\{1,3\}.*' |head -n1 |sed 's/proto.*\|onlink.*//g' |awk '{print \$NF}')\"") $([[ "$FORCEINSTCTL" != '' ]] && echo "$FORCEINSTCTL") $([[ "$FORCEPASSWORD" != '' ]] && echo "$FORCEPASSWORD") $([ "$setNet" == '1' -a "$FORCENETCFGSTR" != '' ] && echo "$FIP,$FMASK,$FGATE";[ "$AutoNet" == '1' -o "$AutoNet" == '2' ] && [ "$IP" != '' -a "$MASK" != '' -a "$GATE" != '' ] && echo "$IP","$MASK","$GATE")
 EOF
 
 
@@ -716,11 +739,11 @@ EOF
 
 patchpreseed(){
 
-  # dhcp only
-  [[ "$AutoNet" == '2' ]] && {
-    [[ "$tmpBUILD" != "1" ]] && sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_.*/d' -e '/netcfg\/confirm_static/d' -i $topdir/$remasteringdir/initramfs/preseed.cfg || sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_.*/d' -e '/netcfg\/confirm_static/d' -i "" $topdir/$remasteringdir/initramfs/preseed.cfg
-    [[ "$tmpBUILD" != "1" ]] && sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_.*/d' -e '/netcfg\/confirm_static/d' -i $topdir/$remasteringdir/initramfs_arm64/preseed.cfg || sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_.*/d' -e '/netcfg\/confirm_static/d' -i "" $topdir/$remasteringdir/initramfs_arm64/preseed.cfg
-  }
+  # in debian installer, some machine dhcp mode are not clever enough, so just leave it force, force, force
+  # [[ "$AutoNet" == '2' ]] && {
+  #   [[ "$tmpBUILD" != "1" ]] && sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_nameserver/ !{/netcfg\/get_.*/d}' -e '/netcfg\/confirm_static/d' -i $topdir/$remasteringdir/initramfs/preseed.cfg || sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_nameserver/ !{/netcfg\/get_.*/d}' -e '/netcfg\/confirm_static/d' -i "" $topdir/$remasteringdir/initramfs/preseed.cfg
+  #   [[ "$tmpBUILD" != "1" ]] && sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_nameserver/ !{/netcfg\/get_.*/d}' -e '/netcfg\/confirm_static/d' -i $topdir/$remasteringdir/initramfs_arm64/preseed.cfg || sed -e '/netcfg\/disable_autoconfig/d' -e '/netcfg\/dhcp_options/d' -e '/netcfg\/get_nameserver/ !{/netcfg\/get_.*/d}' -e '/netcfg\/confirm_static/d' -i "" $topdir/$remasteringdir/initramfs_arm64/preseed.cfg
+  # }
 
   #[[ "$GRUBPATCH" == '1' ]] && {
   #  sed -i 's/^d-i\ grub-installer\/bootdev\ string\ default//g' $topdir/$remasteringdir/initramfs/preseed.cfg
@@ -1131,32 +1154,14 @@ inplacemutating(){
     sed -i '/^root:/d' /x/etc/shadow
     grep '^root:' /etc/shadow >> /x/etc/shadow
     # [ -d /root/.ssh ] && cp -a /root/.ssh /x/root/
-    dev=$(awk '$2 == 00000000 { print $1 }' /proc/net/route)
     [ -d /x/etc/network/ ] || mkdir -p /x/etc/network/
-    ipaddr_with_mask=$(ip addr show dev $dev | sed -nE '/global/s/.*inet (.+) brd.*$/\1/p' | head -n 1)
-    hostname=$(hostname)
-    route_part="$(ip route show default 0.0.0.0/0 | sed -E 's/^(.*dev [^ ]+).*$/\1/')"
-    gateway_line="up route add $route_part"
     if [ -f /etc/network/interfaces ] && grep static /etc/network/interfaces > /dev/null ; then
         cp -rf /etc/network/interfaces /x/etc/network/interfaces
     else
-        cat > /x/etc/network/interfaces <<- EOF
-			auto lo
-			iface lo inet loopback
-
-			auto $dev
-			iface $dev inet static
-			address $ipaddr_with_mask
-			$gateway_line
-
-			hostname $hostname
-		EOF
+        cp -rf $remasteringdir/ctrnet /x/etc/network/interfaces
     fi
     rm /x/etc/resolv.conf
-	cat > /x/etc/resolv.conf <<- EOF
-		nameserver 8.8.8.8
-		nameserver 2001:4860:4860::8888
-	EOF
+    cp -rf $remasteringdir/ctrdns /x/etc/resolv.conf
 
 
     ### replace_os
@@ -1515,7 +1520,7 @@ while [[ $# -ge 1 ]]; do
 [[ $tmpTARGETMODE != 1 && $forcemaintainmode == 1 ]] && { echo -e "\033[31m\n维护,脚本无限期闭源或开放，请联系作者\nThe script was invalid in maintaince mode with a undetermined closed/reopen date,please contact the author\n \033[0m"; exit 1; }
 
 #echo -en "\n\033[36m # Checking Prerequisites: \033[0m"
-
+apt-get install  binutils -y
 printf "\n ✔ %-30s" "Checking deps ......"
 if [[ "$tmpTARGET" == 'debianbase' && "$tmpTARGETMODE" == '1' ]]; then
   CheckDependence sudo,wget,ar,awk,grep,sed,cut,cat,cpio,curl,gzip,find,dirname,basename,xzcat,zcat,md5sum,sha1sum,sha256sum,grub-reboot;
@@ -1682,14 +1687,14 @@ curl --max-time 5 --silent --output /dev/null https://counter.minlearn.org/{dsrk
   printf "\n %-20s" "`echo -en \" \033[32m if netcfg valid,connected to sshd@publicIPofthisserver:22 without passwords\033[0m \"`"
   printf "\n %-20s" "`echo -en \" \033[32m if netcfg unvalid,the system will roll to normal current running os after 5 mins\033[0m \033[0m ] \"`"
 
-  echo;for time in `seq -w 20 -1 0`;do echo -n -e "\b\b$time";sleep 1;done;reboot -f >/dev/null 2>&1;
+  echo;for time in `seq -w 5 -1 0`;do echo -n -e "\b\b$time";sleep 1;done;reboot -f >/dev/null 2>&1;
 }
 
 [[ "$tmpBUILD" == "11" ]] && [[ "$tmpTARGETMODE" != "1" ]] && {
   printf "\n ✔ %-30s" "Prepare reboot ... " && { GRUBID=`bcdedit /enum ACTIVE|sed 's/\r//g'|tail -n4|head -n 1|awk -F ' ' '{ print $2}'`;bcdedit /bootsequence $GRUBID /addfirst; }
   trap 'echo; echo "- aborting by user, restoreall"; restoreall;exit 1' SIGINT
   printf "\n ✔ %-30s" "All done! `echo -n \" wait till auto reboot after 20s,or ctlc to interrupt \"`......"
-  echo;for time in `seq -w 20 -1 0`;do echo -n -e "\b\b$time";sleep 1;done;shutdown -t 0 -r -f >/dev/null 2>&1;
+  echo;for time in `seq -w 5 -1 0`;do echo -n -e "\b\b$time";sleep 1;done;shutdown -t 0 -r -f >/dev/null 2>&1;
 }
 
 [[ "$tmpBUILD" == "1" ]] && [[ "$tmpTARGETMODE" != "1" ]] && {
@@ -1698,7 +1703,7 @@ curl --max-time 5 --silent --output /dev/null https://counter.minlearn.org/{dsrk
   printf "\n ✔ %-30s" "Prepare reboot ... " && { sudo grub-mkstandalone -o /Volumes/EFI/out.efi -O x86_64-efi /vmlinuz_1keyddinst=$topdir/$remasteringdir/boot/vmlinuz_1keyddinst /initrfs_1keyddinst.img=$topdir/$remasteringdir/boot/initrfs_1keyddinst.img /boot/grub/grub.cfg=$topdir/$remasteringdir/boot/grub.new;sudo bless --mount /Volumes/EFI --setBoot --file /Volumes/EFI/out.efi --shortform; }
   trap 'echo; echo "- aborting by user, restoreall"; restoreall;exit 1' SIGINT
   printf "\n ✔ %-30s" "All done! `echo -n \" wait till auto reboot after 20s,or ctlc to interrupt \"`......"
-  echo;for time in `seq -w 20 -1 0`;do echo -n -e "\b\b$time";sleep 1;done;sudo reboot -f >/dev/null 2>&1;
+  echo;for time in `seq -w 5 -1 0`;do echo -n -e "\b\b$time";sleep 1;done;sudo reboot -f >/dev/null 2>&1;
 }
 
 [[ "$tmpTARGETMODE" == '4' && "$tmpTARGET" != 'debiandemu' ]] && {
@@ -1731,6 +1736,3 @@ curl --max-time 5 --silent --output /dev/null https://counter.minlearn.org/{dsrk
   exit
 }
 #----------------------------genmode only end-------------------------------
-
-
-
